@@ -534,7 +534,7 @@ EncodedJSValue JSC_HOST_CALL dateProtoFuncToISOString(ExecState* exec)
     // If the year is outside the bounds of 0 and 9999 inclusive we want to use the extended year format (ES 15.9.1.15.1).
     int ms = static_cast<int>(fmod(thisDateObj->internalNumber(), msPerSecond));
     if (ms < 0)
-        ms += msPerSecond;
+        ms += (int )msPerSecond;
     if (gregorianDateTime->year > 8099 || gregorianDateTime->year < -1900)
         snprintf(buffer, sizeof(buffer) - 1, "%+07d-%02d-%02dT%02d:%02d:%02d.%03dZ", 1900 + gregorianDateTime->year, gregorianDateTime->month + 1, gregorianDateTime->monthDay, gregorianDateTime->hour, gregorianDateTime->minute, gregorianDateTime->second, ms);
     else
