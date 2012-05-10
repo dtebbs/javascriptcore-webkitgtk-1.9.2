@@ -139,7 +139,7 @@ bool ExecutionCounter::setThreshold(CodeBlock* codeBlock)
         
     if (threshold <= 0) {
         m_counter = 0;
-        m_totalCount = trueTotalCount;
+        m_totalCount = (float )trueTotalCount;
         return true;
     }
 
@@ -148,7 +148,7 @@ bool ExecutionCounter::setThreshold(CodeBlock* codeBlock)
         
     m_counter = static_cast<int32_t>(-threshold);
         
-    m_totalCount = trueTotalCount + threshold;
+    m_totalCount = (float )(trueTotalCount + threshold);
         
     return false;
 }
