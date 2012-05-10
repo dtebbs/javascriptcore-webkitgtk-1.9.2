@@ -73,14 +73,14 @@ void Data::performAssertions(JSGlobalData& globalData)
     ASSERT(OBJECT_OFFSETOF(EncodedValueDescriptor, asBits.payload) == 0);
 #endif
 #if USE(JSVALUE32_64)
-    ASSERT(JSValue::Int32Tag == -1);
-    ASSERT(JSValue::BooleanTag == -2);
-    ASSERT(JSValue::NullTag == -3);
-    ASSERT(JSValue::UndefinedTag == -4);
-    ASSERT(JSValue::CellTag == -5);
-    ASSERT(JSValue::EmptyValueTag == -6);
-    ASSERT(JSValue::DeletedValueTag == -7);
-    ASSERT(JSValue::LowestTag == -7);
+    ASSERT(JSValue::Int32Tag == (unsigned )-1);
+    ASSERT(JSValue::BooleanTag == (unsigned )-2);
+    ASSERT(JSValue::NullTag == (unsigned )-3);
+    ASSERT(JSValue::UndefinedTag == (unsigned )-4);
+    ASSERT(JSValue::CellTag == (unsigned )-5);
+    ASSERT(JSValue::EmptyValueTag == (unsigned )-6);
+    ASSERT(JSValue::DeletedValueTag == (unsigned )-7);
+    ASSERT(JSValue::LowestTag == (unsigned )-7);
 #else
     ASSERT(TagBitTypeOther == 0x2);
     ASSERT(TagBitBool == 0x4);
