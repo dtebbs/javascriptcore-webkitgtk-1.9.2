@@ -41,7 +41,7 @@ $stderr.puts "offlineasm: Parsing #{inputFlnm} and creating offset extractor #{o
 def emitMagicNumber
     OFFSET_MAGIC_NUMBERS.each {
         | number |
-        $output.puts "#{number},"
+        $output.puts "#{number}u,"
     }
 end
 
@@ -73,7 +73,7 @@ class Node
             child.offsetsPruneTo(sequence)
         }
     end
-    
+
     def offsetsPrune
         result = Sequence.new(codeOrigin, [])
         offsetsPruneTo(result)
@@ -119,14 +119,14 @@ File.open(outputFlnm, "w") {
         | settings, ast, backend, index |
         OFFSET_HEADER_MAGIC_NUMBERS.each {
             | number |
-            $output.puts "#{number},"
+            $output.puts "#{number}u,"
         }
 
         offsetsList = ast.filter(StructOffset).uniq.sort
         sizesList = ast.filter(Sizeof).uniq.sort
-        
+
         emitMagicNumber
-        outp.puts "#{index},"
+        outp.puts "#{index}u,"
         offsetsList.each {
             | offset |
             emitMagicNumber
