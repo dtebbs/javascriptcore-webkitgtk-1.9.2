@@ -28,25 +28,6 @@
 
 namespace WTF {
 
-#if OS(WINDOWS)
-inline size_t allocationSize()
-{
-    static size_t size = 0;
-    if (size == 0)
-    {
-        SYSTEM_INFO system_info;
-        GetSystemInfo(&system_info);
-        size = system_info.dwAllocationGranularity;
-    }
-    return size;
-}
-#else
-inline size_t allocationSize()
-{
-    return pageSize();
-}
-#endif
-
 PageAllocationAligned PageAllocationAligned::allocate(size_t size, size_t alignment, OSAllocator::Usage usage, bool writable, bool executable)
 {
     ASSERT(isPageAligned(size));
@@ -71,11 +52,7 @@ PageAllocationAligned PageAllocationAligned::allocate(size_t size, size_t alignm
 #else
 
     // Resererve with suffcient additional VM to correctly align.
-#ifdef OS(WINDOWS)
-    size_t alignmentDelta = alignment <= allocationSize() && size <= allocationSize() ? 0 : alignment - allocationSize();
-#else
     size_t alignmentDelta = alignment - pageSize();
-#endif
     size_t reservationSize = size + alignmentDelta;
 
     void* reservationBase = OSAllocator::reserveUncommitted(reservationSize, usage, writable, executable);
