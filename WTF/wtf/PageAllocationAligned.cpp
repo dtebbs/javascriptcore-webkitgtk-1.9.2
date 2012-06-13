@@ -52,7 +52,8 @@ PageAllocationAligned PageAllocationAligned::allocate(size_t size, size_t alignm
 #else
 
     // Resererve with suffcient additional VM to correctly align.
-    size_t alignmentDelta = alignment - pageSize();
+    size_t alignmentDelta = alignment < 0x10000 ? 0 : alignment - 0x10000;
+
     size_t reservationSize = size + alignmentDelta;
 
     void* reservationBase = OSAllocator::reserveUncommitted(reservationSize, usage, writable, executable);
