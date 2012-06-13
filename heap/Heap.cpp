@@ -156,8 +156,8 @@ static inline size_t proportionalHeapSize(size_t heapSize, size_t ramSize)
     if (heapSize < ramSize / 4)
         return 2 * heapSize;
     if (heapSize < ramSize / 2)
-        return 1.5 * heapSize;
-    return 1.25 * heapSize;
+        return (size_t )(1.5 * (double )heapSize);
+    return (size_t )(1.25 * (double )heapSize);
 }
 
 static inline bool isValidSharedInstanceThreadState()
