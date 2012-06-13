@@ -293,6 +293,11 @@
 #define WTF_CPU_ARM_NEON 1
 #endif
 
+#if CPU(ARM_NEON) && (!COMPILER(GCC) || GCC_VERSION_AT_LEAST(4, 7, 0))
+// All NEON intrinsics usage can be disabled by this macro.
+#define HAVE_ARM_NEON_INTRINSICS 1
+#endif
+
 #endif /* ARM */
 
 #if CPU(ARM) || CPU(MIPS) || CPU(SH4) || CPU(SPARC)
@@ -552,6 +557,8 @@
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD) && !defined(BUILDING_ON_LION)
 #define HAVE_LAYER_HOSTING_IN_WINDOW_SERVER 1
 #endif
+#define WTF_USE_APPKIT 1
+#define WTF_USE_SECURITY_FRAMEWORK 1
 #endif /* PLATFORM(MAC) && !PLATFORM(IOS) */
 
 #if PLATFORM(CHROMIUM) && OS(DARWIN)
@@ -603,6 +610,8 @@
     #define ENABLE_YARR_JIT 1
 #endif
 
+#define WTF_USE_APPKIT 0
+#define WTF_USE_SECURITY_FRAMEWORK 0
 #endif
 
 #if PLATFORM(WIN) && !OS(WINCE)
@@ -651,7 +660,7 @@
 #endif
 
 #if !defined(HAVE_ACCESSIBILITY)
-#if PLATFORM(IOS) || PLATFORM(MAC) || PLATFORM(WIN) || PLATFORM(GTK) || PLATFORM(CHROMIUM)
+#if PLATFORM(IOS) || PLATFORM(MAC) || PLATFORM(WIN) || PLATFORM(GTK) || (PLATFORM(CHROMIUM) && !OS(ANDROID))
 #define HAVE_ACCESSIBILITY 1
 #endif
 #endif /* !defined(HAVE_ACCESSIBILITY) */
@@ -812,7 +821,11 @@
 #endif
 
 #if !defined(ENABLE_SUBPIXEL_LAYOUT)
+#if PLATFORM(CHROMIUM)
+#define ENABLE_SUBPIXEL_LAYOUT 1 
+#else
 #define ENABLE_SUBPIXEL_LAYOUT 0
+#endif
 #endif
 
 #define ENABLE_DEBUG_WITH_BREAKPOINT 0
@@ -1011,7 +1024,7 @@
 #define WTF_PLATFORM_CFNETWORK Error USE_macro_should_be_used_with_CFNETWORK
 
 /* FIXME: Eventually we should enable this for all platforms and get rid of the define. */
-#if PLATFORM(IOS) || PLATFORM(MAC) || PLATFORM(WIN) || PLATFORM(QT) || PLATFORM(GTK)
+#if PLATFORM(IOS) || PLATFORM(MAC) || PLATFORM(WIN) || PLATFORM(QT) || PLATFORM(GTK) || PLATFORM(EFL)
 #define WTF_USE_PLATFORM_STRATEGIES 1
 #endif
 

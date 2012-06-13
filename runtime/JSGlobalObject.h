@@ -41,6 +41,7 @@ namespace JSC {
     class DatePrototype;
     class Debugger;
     class ErrorConstructor;
+    class ErrorPrototype;
     class FunctionPrototype;
     class GetterSetter;
     class GlobalCodeBlock;
@@ -68,6 +69,9 @@ namespace JSC {
 
         typedef bool (*ShouldInterruptScriptFunctionPtr)(const JSGlobalObject*);
         ShouldInterruptScriptFunctionPtr shouldInterruptScript;
+
+        typedef bool (*JavaScriptExperimentsEnabledFunctionPtr)(const JSGlobalObject*);
+        JavaScriptExperimentsEnabledFunctionPtr javaScriptExperimentsEnabled;
     };
 
     class JSGlobalObject : public JSVariableObject {
@@ -114,6 +118,7 @@ namespace JSC {
         WriteBarrier<NumberPrototype> m_numberPrototype;
         WriteBarrier<DatePrototype> m_datePrototype;
         WriteBarrier<RegExpPrototype> m_regExpPrototype;
+        WriteBarrier<ErrorPrototype> m_errorPrototype;
 
         WriteBarrier<Structure> m_argumentsStructure;
         WriteBarrier<Structure> m_arrayStructure;
@@ -130,6 +135,7 @@ namespace JSC {
         WriteBarrier<Structure> m_namedFunctionStructure;
         size_t m_functionNameOffset;
         WriteBarrier<Structure> m_numberObjectStructure;
+        WriteBarrier<Structure> m_privateNameStructure;
         WriteBarrier<Structure> m_regExpMatchesArrayStructure;
         WriteBarrier<Structure> m_regExpStructure;
         WriteBarrier<Structure> m_stringObjectStructure;
@@ -144,6 +150,7 @@ namespace JSC {
         SymbolTable m_symbolTable;
 
         bool m_evalEnabled;
+        bool m_experimentsEnabled;
 
         static JS_EXPORTDATA const GlobalObjectMethodTable s_globalObjectMethodTable;
         const GlobalObjectMethodTable* m_globalObjectMethodTable;
@@ -183,6 +190,7 @@ namespace JSC {
         {
             Base::finishCreation(globalData);
             structure()->setGlobalObject(globalData, this);
+            m_experimentsEnabled = m_globalObjectMethodTable->javaScriptExperimentsEnabled(this);
             init(this);
         }
 
@@ -190,6 +198,7 @@ namespace JSC {
         {
             Base::finishCreation(globalData);
             structure()->setGlobalObject(globalData, this);
+            m_experimentsEnabled = m_globalObjectMethodTable->javaScriptExperimentsEnabled(this);
             init(thisValue);
         }
 
@@ -199,20 +208,20 @@ namespace JSC {
 
         JS_EXPORT_PRIVATE static void visitChildren(JSCell*, SlotVisitor&);
 
-        JS_EXPORT_PRIVATE static bool getOwnPropertySlot(JSCell*, ExecState*, const Identifier&, PropertySlot&);
-        JS_EXPORT_PRIVATE static bool getOwnPropertyDescriptor(JSObject*, ExecState*, const Identifier&, PropertyDescriptor&);
-        bool hasOwnPropertyForWrite(ExecState*, const Identifier&);
-        JS_EXPORT_PRIVATE static void put(JSCell*, ExecState*, const Identifier&, JSValue, PutPropertySlot&);
+        JS_EXPORT_PRIVATE static bool getOwnPropertySlot(JSCell*, ExecState*, PropertyName, PropertySlot&);
+        JS_EXPORT_PRIVATE static bool getOwnPropertyDescriptor(JSObject*, ExecState*, PropertyName, PropertyDescriptor&);
+        bool hasOwnPropertyForWrite(ExecState*, PropertyName);
+        JS_EXPORT_PRIVATE static void put(JSCell*, ExecState*, PropertyName, JSValue, PutPropertySlot&);
 
-        JS_EXPORT_PRIVATE static void putDirectVirtual(JSObject*, ExecState*, const Identifier& propertyName, JSValue, unsigned attributes);
+        JS_EXPORT_PRIVATE static void putDirectVirtual(JSObject*, ExecState*, PropertyName, JSValue, unsigned attributes);
 
-        JS_EXPORT_PRIVATE static void defineGetter(JSObject*, ExecState*, const Identifier& propertyName, JSObject* getterFunc, unsigned attributes);
-        JS_EXPORT_PRIVATE static void defineSetter(JSObject*, ExecState*, const Identifier& propertyName, JSObject* setterFunc, unsigned attributes);
-        JS_EXPORT_PRIVATE static bool defineOwnProperty(JSObject*, ExecState*, const Identifier& propertyName, PropertyDescriptor&, bool shouldThrow);
+        JS_EXPORT_PRIVATE static void defineGetter(JSObject*, ExecState*, PropertyName, JSObject* getterFunc, unsigned attributes);
+        JS_EXPORT_PRIVATE static void defineSetter(JSObject*, ExecState*, PropertyName, JSObject* setterFunc, unsigned attributes);
+        JS_EXPORT_PRIVATE static bool defineOwnProperty(JSObject*, ExecState*, PropertyName, PropertyDescriptor&, bool shouldThrow);
 
         // We use this in the code generator as we perform symbol table
         // lookups prior to initializing the properties
-        bool symbolTableHasProperty(const Identifier& propertyName);
+        bool symbolTableHasProperty(PropertyName);
 
         // The following accessors return pristine values, even if a script 
         // replaces the global object's associated property.
@@ -245,6 +254,7 @@ namespace JSC {
         NumberPrototype* numberPrototype() const { return m_numberPrototype.get(); }
         DatePrototype* datePrototype() const { return m_datePrototype.get(); }
         RegExpPrototype* regExpPrototype() const { return m_regExpPrototype.get(); }
+        ErrorPrototype* errorPrototype() const { return m_errorPrototype.get(); }
 
         JSObject* methodCallDummy() const { return m_methodCallDummy.get(); }
 
@@ -263,6 +273,7 @@ namespace JSC {
         Structure* namedFunctionStructure() const { return m_namedFunctionStructure.get(); }
         size_t functionNameOffset() const { return m_functionNameOffset; }
         Structure* numberObjectStructure() const { return m_numberObjectStructure.get(); }
+        Structure* privateNameStructure() const { return m_privateNameStructure.get(); }
         Structure* internalFunctionStructure() const { return m_internalFunctionStructure.get(); }
         Structure* regExpMatchesArrayStructure() const { return m_regExpMatchesArrayStructure.get(); }
         Structure* regExpStructure() const { return m_regExpStructure.get(); }
@@ -290,6 +301,7 @@ namespace JSC {
         JS_EXPORT_PRIVATE ExecState* globalExec();
 
         static bool shouldInterruptScript(const JSGlobalObject*) { return true; }
+        static bool javaScriptExperimentsEnabled(const JSGlobalObject*) { return false; }
 
         bool isDynamicScope(bool& requiresDynamicChecks) const;
 
@@ -365,7 +377,7 @@ namespace JSC {
         m_registerArraySize = count;
     }
 
-    inline bool JSGlobalObject::hasOwnPropertyForWrite(ExecState* exec, const Identifier& propertyName)
+    inline bool JSGlobalObject::hasOwnPropertyForWrite(ExecState* exec, PropertyName propertyName)
     {
         PropertySlot slot;
         if (JSVariableObject::getOwnPropertySlot(this, exec, propertyName, slot))
@@ -374,9 +386,9 @@ namespace JSC {
         return symbolTableGet(propertyName, slot, slotIsWriteable);
     }
 
-    inline bool JSGlobalObject::symbolTableHasProperty(const Identifier& propertyName)
+    inline bool JSGlobalObject::symbolTableHasProperty(PropertyName propertyName)
     {
-        SymbolTableEntry entry = symbolTable().inlineGet(propertyName.impl());
+        SymbolTableEntry entry = symbolTable().inlineGet(propertyName.publicName());
         return !entry.isNull();
     }
 

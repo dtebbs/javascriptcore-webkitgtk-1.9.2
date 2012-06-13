@@ -50,6 +50,7 @@
 #include "LiteralParser.h"
 #include "JSStaticScopeObject.h"
 #include "JSString.h"
+#include "NameInstance.h"
 #include "ObjectPrototype.h"
 #include "Operations.h"
 #include "Parser.h"
@@ -1023,9 +1024,7 @@ NEVER_INLINE HandlerInfo* Interpreter::throwException(CallFrame*& callFrame, JSV
         if (exception->isErrorInstance() && static_cast<ErrorInstance*>(exception)->appendSourceToMessage())
             appendSourceToError(callFrame, static_cast<ErrorInstance*>(exception), bytecodeOffset);
 
-        // Using hasExpressionInfo to imply we are interested in rich exception info.
-        if (codeBlock->hasExpressionInfo() && !hasErrorInfo(callFrame, exception)) {
-            ASSERT(codeBlock->hasLineInfo());
+        if (!hasErrorInfo(callFrame, exception)) {
             // FIXME: should only really be adding these properties to VM generated exceptions,
             // but the inspector currently requires these for all thrown objects.
             addErrorInfo(callFrame, exception, codeBlock->lineNumberForBytecodeOffset(bytecodeOffset), codeBlock->ownerExecutable()->source());
@@ -2448,7 +2447,7 @@ JSValue Interpreter::privateExecute(ExecutionFlag flag, RegisterFile* registerFi
         JSValue dividend = callFrame->r(vPC[2].u.operand).jsValue();
         JSValue divisor = callFrame->r(vPC[3].u.operand).jsValue();
 
-        if (dividend.isInt32() && divisor.isInt32() && divisor.asInt32() != 0) {
+        if (dividend.isInt32() && divisor.isInt32() && divisor.asInt32() != 0 && divisor.asInt32() != -1) {
             JSValue result = jsNumber(dividend.asInt32() % divisor.asInt32());
             ASSERT(result);
             callFrame->uncheckedR(dst) = result;
@@ -2622,7 +2621,7 @@ JSValue Interpreter::privateExecute(ExecutionFlag flag, RegisterFile* registerFi
         */
         int dst = vPC[1].u.operand;
         int src = vPC[2].u.operand;
-        JSValue result = jsBoolean(!callFrame->r(src).jsValue().toBoolean(callFrame));
+        JSValue result = jsBoolean(!callFrame->r(src).jsValue().toBoolean());
         CHECK_FOR_EXCEPTION();
         callFrame->uncheckedR(dst) = result;
 
@@ -2797,6 +2796,8 @@ JSValue Interpreter::privateExecute(ExecutionFlag flag, RegisterFile* registerFi
         uint32_t i;
         if (propName.getUInt32(i))
             callFrame->uncheckedR(dst) = jsBoolean(baseObj->hasProperty(callFrame, i));
+        else if (isName(propName))
+            callFrame->uncheckedR(dst) = jsBoolean(baseObj->hasProperty(callFrame, jsCast<NameInstance*>(propName.asCell())->privateName()));
         else {
             Identifier property(callFrame, propName.toString(callFrame)->value(callFrame));
             CHECK_FOR_EXCEPTION();
@@ -3777,7 +3778,9 @@ skip_id_custom_self:
                 result = asString(baseValue)->getIndex(callFrame, i);
             else
                 result = baseValue.get(callFrame, i);
-        } else {
+        } else if (isName(subscript))
+            result = baseValue.get(callFrame, jsCast<NameInstance*>(subscript.asCell())->privateName());
+        else {
             Identifier property(callFrame, subscript.toString(callFrame)->value(callFrame));
             result = baseValue.get(callFrame, property);
         }
@@ -3815,6 +3818,9 @@ skip_id_custom_self:
                     jsArray->JSArray::putByIndex(jsArray, callFrame, i, callFrame->r(value).jsValue(), codeBlock->isStrictMode());
             } else
                 baseValue.putByIndex(callFrame, i, callFrame->r(value).jsValue(), codeBlock->isStrictMode());
+        } else if (isName(subscript)) {
+            PutPropertySlot slot(codeBlock->isStrictMode());
+            baseValue.put(callFrame, jsCast<NameInstance*>(subscript.asCell())->privateName(), callFrame->r(value).jsValue(), slot);
         } else {
             Identifier property(callFrame, subscript.toString(callFrame)->value(callFrame));
             if (!globalData->exception) { // Don't put to an object if toString threw an exception.
@@ -3846,6 +3852,8 @@ skip_id_custom_self:
         uint32_t i;
         if (subscript.getUInt32(i))
             result = baseObj->methodTable()->deletePropertyByIndex(baseObj, callFrame, i);
+        else if (isName(subscript))
+            result = baseObj->methodTable()->deleteProperty(baseObj, callFrame, jsCast<NameInstance*>(subscript.asCell())->privateName());
         else {
             CHECK_FOR_EXCEPTION();
             Identifier property(callFrame, subscript.toString(callFrame)->value(callFrame));
@@ -3931,7 +3939,7 @@ skip_id_custom_self:
          */
         int cond = vPC[1].u.operand;
         int target = vPC[2].u.operand;
-        if (callFrame->r(cond).jsValue().toBoolean(callFrame)) {
+        if (callFrame->r(cond).jsValue().toBoolean()) {
             vPC += target;
             CHECK_FOR_TIMEOUT();
             NEXT_INSTRUCTION();
@@ -3951,7 +3959,7 @@ skip_id_custom_self:
          */
         int cond = vPC[1].u.operand;
         int target = vPC[2].u.operand;
-        if (!callFrame->r(cond).jsValue().toBoolean(callFrame)) {
+        if (!callFrame->r(cond).jsValue().toBoolean()) {
             vPC += target;
             CHECK_FOR_TIMEOUT();
             NEXT_INSTRUCTION();
@@ -3968,7 +3976,7 @@ skip_id_custom_self:
         */
         int cond = vPC[1].u.operand;
         int target = vPC[2].u.operand;
-        if (callFrame->r(cond).jsValue().toBoolean(callFrame)) {
+        if (callFrame->r(cond).jsValue().toBoolean()) {
             vPC += target;
             NEXT_INSTRUCTION();
         }
@@ -3984,7 +3992,7 @@ skip_id_custom_self:
         */
         int cond = vPC[1].u.operand;
         int target = vPC[2].u.operand;
-        if (!callFrame->r(cond).jsValue().toBoolean(callFrame)) {
+        if (!callFrame->r(cond).jsValue().toBoolean()) {
             vPC += target;
             NEXT_INSTRUCTION();
         }
@@ -4788,17 +4796,6 @@ skip_id_custom_self:
         vPC += OPCODE_LENGTH(op_create_activation);
         NEXT_INSTRUCTION();
     }
-    DEFINE_OPCODE(op_get_callee) {
-        /* op_get_callee callee(r)
-
-           Move callee into a register.
-        */
-
-        callFrame->uncheckedR(vPC[1].u.operand) = JSValue(callFrame->callee());
-
-        vPC += OPCODE_LENGTH(op_get_callee);
-        NEXT_INSTRUCTION();
-    }
     DEFINE_OPCODE(op_create_this) {
         /* op_create_this this(r) proto(r)
 
@@ -4809,7 +4806,6 @@ skip_id_custom_self:
         */
 
         int thisRegister = vPC[1].u.operand;
-        int protoRegister = vPC[2].u.operand;
 
         JSFunction* constructor = jsCast<JSFunction*>(callFrame->callee());
 #if !ASSERT_DISABLED
@@ -4817,12 +4813,7 @@ skip_id_custom_self:
         ASSERT(constructor->methodTable()->getConstructData(constructor, constructData) == ConstructTypeJS);
 #endif
 
-        Structure* structure;
-        JSValue proto = callFrame->r(protoRegister).jsValue();
-        if (proto.isObject())
-            structure = asObject(proto)->inheritorID(callFrame->globalData());
-        else
-            structure = constructor->scope()->globalObject->emptyObjectStructure();
+        Structure* structure = constructor->cachedInheritorID(callFrame);
         callFrame->uncheckedR(thisRegister) = constructEmptyObject(callFrame, structure);
 
         vPC += OPCODE_LENGTH(op_create_this);
@@ -5291,7 +5282,7 @@ JSValue Interpreter::retrieveArgumentsFromVMCode(CallFrame* callFrame, JSFunctio
     if (!functionCallFrame)
         return jsNull();
 
-    CodeBlock* codeBlock = functionCallFrame->codeBlock();
+    CodeBlock* codeBlock = functionCallFrame->someCodeBlockForPossiblyInlinedCode();
     if (codeBlock->usesArguments()) {
         ASSERT(codeBlock->codeType() == FunctionCode);
         int argumentsRegister = codeBlock->argumentsRegister();

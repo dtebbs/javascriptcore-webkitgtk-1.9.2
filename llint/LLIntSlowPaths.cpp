@@ -53,8 +53,16 @@ namespace JSC { namespace LLInt {
     JSGlobalData& globalData = exec->globalData();      \
     NativeCallFrameTracer tracer(&globalData, exec)
 
-#define LLINT_SET_PC_FOR_STUBS() \
-    exec->setCurrentVPC(pc + 1)
+#ifndef NDEBUG
+#define LLINT_SET_PC_FOR_STUBS() do { \
+        exec->codeBlock()->bytecodeOffset(pc); \
+        exec->setCurrentVPC(pc + 1); \
+    } while (false)
+#else
+#define LLINT_SET_PC_FOR_STUBS() do { \
+        exec->setCurrentVPC(pc + 1); \
+    } while (false)
+#endif
 
 #define LLINT_BEGIN()                           \
     LLINT_BEGIN_NO_SET_PC();                    \
@@ -263,7 +271,7 @@ inline bool jitCompileAndSetHeuristics(CodeBlock* codeBlock, ExecState* exec)
         return false;
     }
         
-    CodeBlock::JITCompilationResult result = codeBlock->jitCompile(exec->globalData());
+    CodeBlock::JITCompilationResult result = codeBlock->jitCompile(exec);
     switch (result) {
     case CodeBlock::AlreadyCompiled:
 #if ENABLE(JIT_VERBOSE_OSR)
@@ -458,13 +466,7 @@ LLINT_SLOW_PATH_DECL(slow_path_create_this)
     ASSERT(constructor->methodTable()->getConstructData(constructor, constructData) == ConstructTypeJS);
 #endif
     
-    Structure* structure;
-    JSValue proto = LLINT_OP(2).jsValue();
-    if (proto.isObject())
-        structure = asObject(proto)->inheritorID(globalData);
-    else
-        structure = constructor->scope()->globalObject->emptyObjectStructure();
-    
+    Structure* structure = constructor->cachedInheritorID(exec);
     LLINT_RETURN(constructEmptyObject(exec, structure));
 }
 
@@ -473,6 +475,8 @@ LLINT_SLOW_PATH_DECL(slow_path_convert_this)
     LLINT_BEGIN();
     JSValue v1 = LLINT_OP(1).jsValue();
     ASSERT(v1.isPrimitive());
+    pc[OPCODE_LENGTH(op_convert_this) - 1].u.profile->m_buckets[0] =
+        JSValue::encode(v1.structureOrUndefined());
     LLINT_RETURN(v1.toThisObject(exec));
 }
 
@@ -506,7 +510,7 @@ LLINT_SLOW_PATH_DECL(slow_path_new_regexp)
 LLINT_SLOW_PATH_DECL(slow_path_not)
 {
     LLINT_BEGIN();
-    LLINT_RETURN(jsBoolean(!LLINT_OP_C(2).jsValue().toBoolean(exec)));
+    LLINT_RETURN(jsBoolean(!LLINT_OP_C(2).jsValue().toBoolean()));
 }
 
 LLINT_SLOW_PATH_DECL(slow_path_eq)
@@ -958,6 +962,9 @@ inline JSValue getByVal(ExecState* exec, JSValue baseValue, JSValue subscript)
         
         return baseValue.get(exec, i);
     }
+
+    if (isName(subscript))
+        return baseValue.get(exec, jsCast<NameInstance*>(subscript.asCell())->privateName());
     
     Identifier property(exec, subscript.toString(exec)->value(exec));
     return baseValue.get(exec, property);
@@ -1010,7 +1017,13 @@ LLINT_SLOW_PATH_DECL(slow_path_put_by_val)
         baseValue.putByIndex(exec, i, value, exec->codeBlock()->isStrictMode());
         LLINT_END();
     }
-    
+
+    if (isName(subscript)) {
+        PutPropertySlot slot(exec->codeBlock()->isStrictMode());
+        baseValue.put(exec, jsCast<NameInstance*>(subscript.asCell())->privateName(), value, slot);
+        LLINT_END();
+    }
+
     Identifier property(exec, subscript.toString(exec)->value(exec));
     LLINT_CHECK_EXCEPTION();
     PutPropertySlot slot(exec->codeBlock()->isStrictMode());
@@ -1031,6 +1044,8 @@ LLINT_SLOW_PATH_DECL(slow_path_del_by_val)
     uint32_t i;
     if (subscript.getUInt32(i))
         couldDelete = baseObject->methodTable()->deletePropertyByIndex(baseObject, exec, i);
+    else if (isName(subscript))
+        couldDelete = baseObject->methodTable()->deleteProperty(baseObject, exec, jsCast<NameInstance*>(subscript.asCell())->privateName());
     else {
         LLINT_CHECK_EXCEPTION();
         Identifier property(exec, subscript.toString(exec)->value(exec));
@@ -1094,13 +1109,13 @@ LLINT_SLOW_PATH_DECL(slow_path_jmp_scopes)
 LLINT_SLOW_PATH_DECL(slow_path_jtrue)
 {
     LLINT_BEGIN();
-    LLINT_BRANCH(op_jtrue, LLINT_OP_C(1).jsValue().toBoolean(exec));
+    LLINT_BRANCH(op_jtrue, LLINT_OP_C(1).jsValue().toBoolean());
 }
 
 LLINT_SLOW_PATH_DECL(slow_path_jfalse)
 {
     LLINT_BEGIN();
-    LLINT_BRANCH(op_jfalse, !LLINT_OP_C(1).jsValue().toBoolean(exec));
+    LLINT_BRANCH(op_jfalse, !LLINT_OP_C(1).jsValue().toBoolean());
 }
 
 LLINT_SLOW_PATH_DECL(slow_path_jless)
@@ -1164,6 +1179,20 @@ LLINT_SLOW_PATH_DECL(slow_path_switch_imm)
         pc += codeBlock->immediateSwitchJumpTable(pc[1].u.operand).offsetForValue(intValue, defaultOffset);
     } else
         pc += defaultOffset;
+    LLINT_END();
+}
+
+LLINT_SLOW_PATH_DECL(slow_path_switch_char)
+{
+    LLINT_BEGIN();
+    JSValue scrutinee = LLINT_OP_C(3).jsValue();
+    ASSERT(scrutinee.isString());
+    JSString* string = asString(scrutinee);
+    ASSERT(string->length() == 1);
+    int defaultOffset = pc[2].u.operand;
+    StringImpl* impl = string->value(exec).impl();
+    CodeBlock* codeBlock = exec->codeBlock();
+    pc += codeBlock->characterSwitchJumpTable(pc[1].u.operand).offsetForValue((*impl)[0], defaultOffset);
     LLINT_END();
 }
 

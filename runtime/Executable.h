@@ -43,8 +43,6 @@ namespace JSC {
     class LLIntOffsetsExtractor;
     class ProgramCodeBlock;
     class ScopeChainNode;
-
-    struct ExceptionInfo;
     
     enum CompilationKind { FirstCompilation, OptimizingCompilation };
 
@@ -271,14 +269,14 @@ namespace JSC {
         ScriptExecutable(Structure* structure, JSGlobalData& globalData, const SourceCode& source, bool isInStrictContext)
             : ExecutableBase(globalData, structure, NUM_PARAMETERS_NOT_COMPILED)
             , m_source(source)
-            , m_scopeFlags(isInStrictContext ? StrictModeFlag : NoScopeFlags)
+            , m_features(isInStrictContext ? StrictModeFeature : 0)
         {
         }
 
         ScriptExecutable(Structure* structure, ExecState* exec, const SourceCode& source, bool isInStrictContext)
             : ExecutableBase(exec->globalData(), structure, NUM_PARAMETERS_NOT_COMPILED)
             , m_source(source)
-            , m_scopeFlags(isInStrictContext ? StrictModeFlag : NoScopeFlags)
+            , m_features(isInStrictContext ? StrictModeFeature : 0)
         {
         }
 
@@ -287,15 +285,15 @@ namespace JSC {
 #endif
 
         const SourceCode& source() { return m_source; }
-        intptr_t sourceID() const { return m_source.provider()->asID(); }
+        intptr_t sourceID() const { return m_source.providerID(); }
         const UString& sourceURL() const { return m_source.provider()->url(); }
         int lineNo() const { return m_firstLine; }
         int lastLine() const { return m_lastLine; }
 
-        bool usesEval() const { return m_scopeFlags & UsesEvalFlag; }
-        bool usesArguments() const { return m_scopeFlags & UsesArgumentsFlag; }
-        bool needsActivation() const { return m_hasCapturedVariables || m_scopeFlags & (UsesEvalFlag | UsesWithFlag | UsesCatchFlag); }
-        bool isStrictMode() const { return m_scopeFlags & StrictModeFlag; }
+        bool usesEval() const { return m_features & EvalFeature; }
+        bool usesArguments() const { return m_features & ArgumentsFeature; }
+        bool needsActivation() const { return m_hasCapturedVariables || m_features & (EvalFeature | WithFeature | CatchFeature); }
+        bool isStrictMode() const { return m_features & StrictModeFeature; }
 
         void unlinkCalls();
         
@@ -311,16 +309,16 @@ namespace JSC {
 #endif
         }
 
-        void recordParse(ScopeFlags scopeFlags, bool hasCapturedVariables, int firstLine, int lastLine)
+        void recordParse(CodeFeatures features, bool hasCapturedVariables, int firstLine, int lastLine)
         {
-            m_scopeFlags = scopeFlags;
+            m_features = features;
             m_hasCapturedVariables = hasCapturedVariables;
             m_firstLine = firstLine;
             m_lastLine = lastLine;
         }
 
         SourceCode m_source;
-        ScopeFlags m_scopeFlags;
+        CodeFeatures m_features;
         bool m_hasCapturedVariables;
         int m_firstLine;
         int m_lastLine;
@@ -347,7 +345,7 @@ namespace JSC {
         
 #if ENABLE(JIT)
         void jettisonOptimizedCode(JSGlobalData&);
-        bool jitCompile(JSGlobalData&);
+        bool jitCompile(ExecState*);
 #endif
 
         EvalCodeBlock& generatedBytecode()
@@ -422,7 +420,7 @@ namespace JSC {
         
 #if ENABLE(JIT)
         void jettisonOptimizedCode(JSGlobalData&);
-        bool jitCompile(JSGlobalData&);
+        bool jitCompile(ExecState*);
 #endif
 
         ProgramCodeBlock& generatedBytecode()
@@ -524,7 +522,7 @@ namespace JSC {
         
 #if ENABLE(JIT)
         void jettisonOptimizedCodeForCall(JSGlobalData&);
-        bool jitCompileForCall(JSGlobalData&);
+        bool jitCompileForCall(ExecState*);
 #endif
 
         bool isGeneratedForCall() const
@@ -552,7 +550,7 @@ namespace JSC {
         
 #if ENABLE(JIT)
         void jettisonOptimizedCodeForConstruct(JSGlobalData&);
-        bool jitCompileForConstruct(JSGlobalData&);
+        bool jitCompileForConstruct(ExecState*);
 #endif
 
         bool isGeneratedForConstruct() const
@@ -601,12 +599,12 @@ namespace JSC {
             }
         }
         
-        bool jitCompileFor(JSGlobalData& globalData, CodeSpecializationKind kind)
+        bool jitCompileFor(ExecState* exec, CodeSpecializationKind kind)
         {
             if (kind == CodeForCall)
-                return jitCompileForCall(globalData);
+                return jitCompileForCall(exec);
             ASSERT(kind == CodeForConstruct);
-            return jitCompileForConstruct(globalData);
+            return jitCompileForConstruct(exec);
         }
 #endif
         

@@ -958,6 +958,30 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\runtime\NameConstructor.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NameConstructor.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NameInstance.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NameInstance.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NamePrototype.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NamePrototype.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\runtime\NativeErrorConstructor.cpp"
 				>
 			</File>
@@ -2058,6 +2082,10 @@
 				>
 			</File>
 			<File
+				RelativePath="$(ConfigurationBuildDir)\obj\$(ProjectName)\DerivedSources\NamePrototype.lut.h"
+				>
+			</File>
+			<File
 				RelativePath="$(ConfigurationBuildDir)\obj\$(ProjectName)\DerivedSources\NumberConstructor.lut.h"
 				>
 			</File>
@@ -2127,6 +2155,14 @@
 			</File>
 			<File
 				RelativePath="..\..\heap\HandleSet.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\heap\IncrementalSweeper.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\heap\IncrementalSweeper.cpp"
 				>
 			</File>
 			<File
