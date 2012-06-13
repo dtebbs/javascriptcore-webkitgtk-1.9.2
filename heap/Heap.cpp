@@ -315,7 +315,7 @@ void Heap::reportAbandonedObjectGraph()
     // been abandoned, the next collection has the potential to 
     // be more profitable. Since allocation is the trigger for collection, 
     // we hasten the next collection by pretending that we've allocated more memory. 
-    didAbandon(abandonedBytes);
+    didAbandon((size_t )abandonedBytes);
 }
 
 void Heap::didAbandon(size_t bytes)
